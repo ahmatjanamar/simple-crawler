@@ -1,0 +1,102 @@
+import requests
+from bs4 import BeautifulSoup
+
+
+headers={"User-agent": 'Mozilla/5.0 (Macintosh; '
+                                              'Intel Mac OS X 10_15_3) AppleWebKit/605.1.15 (KHTML, '
+                                              'like Gecko) Version/13.0.5 Safari/605.1.15'}
+
+class Content:
+    """
+    common base class for all articles/pages
+    """
+    def __init__(self, topic, url, title, body):
+        self.topic = topic
+        self.title = title
+        self.url = url
+        self.body = body
+
+    def print_(self):
+        """
+        :return: Flexible print function controls the output
+        """
+        print("New article found for topic: {}".format(self.topic))
+        print("TTITLE : {}".format(self.title))
+        print("BODY : {}".format(self.body))
+        print("URL: {}".format(self.url))
+
+
+class Website:
+    """contains information about web structures"""
+
+    def __init__(self, name, url, searchUrl, resultListing, resultUrl, absoluteUrl, titleTag, bodyTag):
+        self.name = name
+        self.url = url
+        self.searchUrl = searchUrl
+        self.resultListing = resultListing
+        self.resultUrl = resultUrl
+        self.absoluteUrl = absoluteUrl
+        self.titleTag = titleTag
+        self.bodyTag = bodyTag
+
+
+class Crawler:
+
+    def get_page(self, url):
+        try:
+            req = requests.request('GET', url, headers=headers)
+        except requests.exceptions.RequestException as error:
+            return None
+
+        return BeautifulSoup(req.text, 'lxml')
+
+    def safe_get(self, page_obj, selector):
+        chilld_obj = page_obj.select(selector)
+        if chilld_obj is not None and len(chilld_obj) > 0:
+            return chilld_obj[0].get_text()
+
+        return ''
+
+    def search(self, topic, site):
+        """
+        searches a given website for a given topic and records all the pages found
+        """
+        bs = self.get_page(site.searchUrl + topic)
+        search_results = bs.select(site.resultListing)
+        for result in search_results:
+            url = result.select(site.resultUrl)[0].attrs['href']
+            if (site.absoluteUrl):
+                bs = self.get_page(url)
+            else:
+                bs = self.get_page(site.url + url)
+            if bs is None:
+                print('something was wrong with that page or url skipping !')
+                return
+            title = self.safe_get(bs, site.titletag)
+            body = self.safe_get(bs, site.bodyTag)
+            if title != '' and body != '':
+                content = Content(topic, title, body, url)
+                content.print_()
+
+
+crawler = Crawler()
+
+example = [
+    ['O\'Reilly Media', 'http://oreilly.com',
+'https://ssearch.oreilly.com/?q=','article.product-result',
+'p.title a', True, 'h1', 'section#product-description'],
+    ['Reuters', 'http://reuters.com','http://www.reuters.com/search/news?blob=',
+     'div.search-result-content','h3.search-result-title a', False,
+     'h1', 'div.StandardArticleBody_body_1gnLA'],
+    ['Brookings', 'http://www.brookings.edu', 'https://www.brookings.edu/search/?s=', 'div.list-content article', 'h4.title a', True, 'h1','div.post-body']
+    ]
+
+sites = []
+for row in example:
+    sites.append(Website(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]))
+topics = ['python', 'data science']
+
+for topic in topics:
+    print('getting information about: ' + topic)
+    for target_site in sites:
+        crawler.search(topic, target_site)
